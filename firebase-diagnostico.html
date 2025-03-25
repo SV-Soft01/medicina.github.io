@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnóstico de Conexión a Firebase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .config-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #3367D6;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .log-container {
+            background-color: #333;
+            color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        .success-log {
+            color: #4CAF50;
+        }
+        .error-log {
+            color: #F44336;
+        }
+        .warning-log {
+            color: #FFC107;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Diagnóstico de Conexión a Firebase</h1>
+        
+        <div class="card">
+            <h2>1. Verificar Scripts de Firebase</h2>
+            <p>Asegúrate de que todos los scripts necesarios de Firebase estén incluidos en tu página:</p>
+            <ul>
+                <li>firebase-app.js (Core)</li>
+                <li>firebase-firestore.js</li>
+                <li>firebase-database.js</li>
+                <li>firebase-auth.js (opcional)</li>
+            </ul>
+            <button onclick="verificarScriptsFirebase()">Verificar Scripts</button>
+            <div id="scripts-status" class="status"></div>
+        </div>
+        
+        <div class="card">
+            <h2>2. Configuración de Firebase</h2>
+            <p>Verifica que tu configuración de Firebase sea correcta:</p>
+            <div class="config-section">
+                <textarea id="firebase-config" placeholder='{ 
+  "apiKey": "tu-api-key",
+  "authDomain": "tu-proyecto.firebaseapp.com",
+  "projectId": "tu-proyecto",
+  "storageBucket": "tu-proyecto.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abcdef"
+}'></textarea>
+                <button onclick="aplicarConfiguracion()">Aplicar Configuración</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>3. Diagnóstico de Conexión</h2>
+            <p>Ejecuta un diagnóstico completo de la conexión a Firebase:</p>
+            <button onclick="ejecutarDiagnostico()">Ejecutar Diagnóstico</button>
+            <button onclick="reiniciarFirebase()">Reiniciar Firebase</button>
+            <div id="diagnostico-status" class="status"></div>
+        </div>
+        
+        <div class="log-container" id="log-container">
+            <div class="log-entry">Esperando acciones...</div>
+        </div>
+    </div>
+
+    <!-- Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    
+    <!-- Add Firebase products that you want to use -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    
+    <script>
+        // Función para agregar entradas al log
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('log-container');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}-log`;
+            logEntry.textContent = message;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Función para actualizar el estado
+        function updateStatus(elementId, message, type) {
+            const statusElement = document.getElementById(elementId);
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+        }
+        
+        // Verificar scripts de Firebase
+        function verificarScriptsFirebase() {
+            addLog("Verificando scripts de Firebase...");
+            
+            const scriptsNecesarios = [
+                { name: "firebase-app.js", found: false },
+                { name: "firebase-firestore.js", found: false },
+                { name: "firebase-database.js", found: false },
+                { name: "firebase-auth.js", found: false, optional: true }
+            ];
+            
+            // Buscar scripts en el documento
+            document.querySelectorAll("script").forEach(script => {
+                const src = script.src.toLowerCase();
+                scriptsNecesarios.forEach(necesario => {
+                    if (src.includes(necesario.name)) {
+                        necesario.found = true;
+                        addLog(`✅ Script ${necesario.name} encontrado`, 'success');
+                    }
+                });
+            });
+            
+            // Verificar scripts faltantes
+            const scriptsFaltantes = scriptsNecesarios.filter(script => !script.found && !script.optional);
+            const scriptsOpcionales = scriptsNecesarios.filter(script => !script.found && script.optional);
+            
+            if (scriptsFaltantes.length > 0) {
+                updateStatus('scripts-status', 
+                    `Faltan scripts obligatorios: ${scriptsFaltantes.map(s => s.name).join(', ')}`, 
+                    'error');
+                scriptsFaltantes.forEach(script => {
+                    addLog(`❌ Script ${script.name} NO encontrado (obligatorio)`, 'error');
+                });
+                return false;
+            }
+            
+            if (scriptsOpcionales.length > 0) {
+                updateStatus('scripts-status', 
+                    `Todos los scripts obligatorios están presentes. Faltan algunos opcionales: ${scriptsOpcionales.map(s => s.name).join(', ')}`, 
+                    'warning');
+                scriptsOpcionales.forEach(script => {
+                    addLog(`⚠️ Script ${script.name} NO encontrado (opcional)`, 'warning');
+                });
+            } else {
+                updateStatus('scripts-status', 'Todos los scripts de Firebase están correctamente incluidos', 'success');
+            }
+            
+            return scriptsFaltantes.length === 0;
+        }
+        
+        // Aplicar configuración de Firebase
+        function aplicarConfiguracion() {
+            try {
+                const configText = document.getElementById('firebase-config').value.trim();
+                
+                if (!configText) {
+                    updateStatus('diagnostico-status', 'Por favor, ingresa la configuración de Firebase', 'error');
+                    addLog('❌ Configuración vacía', 'error');
+                    return;
+                }
+                
+                const config = JSON.parse(configText);
+                addLog("Aplicando configuración de Firebase...");
+                
+                // Desconectar todas las instancias existentes
+                if (firebase.apps.length) {
+                    addLog("Cerrando instancias existentes de Firebase...");
+                    firebase.apps.forEach(app => app.delete());
+                }
+                
+                // Inicializar Firebase con la nueva configuración
+                firebase.initializeApp(config);
+                
+                addLog("✅ Firebase inicializado correctamente con la nueva configuración", 'success');
+                updateStatus('diagnostico-status', 'Configuración aplicada correctamente', 'success');
+                
+                // Guardar configuración en localStorage para futuras referencias
+                localStorage.setItem('firebaseConfig', configText);
+                
+                // Verificar si la configuración funciona
+                setTimeout(ejecutarDiagnostico, 1000);
+                
+            } catch (error) {
+                addLog(`❌ Error al aplicar configuración: ${error.message}`, 'error');
+                updateStatus('diagnostico-status', `Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Ejecutar diagnóstico completo
+        function ejecutarDiagnostico() {
+            addLog("Iniciando diagnóstico completo de Firebase...");
+            updateStatus('diagnostico-status', 'Ejecutando diagnóstico...', 'warning');
+            
+            // Paso 1: Verificar si Firebase está definido
+            if (typeof firebase === 'undefined') {
+                addLog("❌ Firebase no está definido", 'error');
+                updateStatus('diagnostico-status', 'Firebase no está definido. Verifica los scripts.', 'error');
+                return;
+            }
+            addLog("✅ Firebase está definido", 'success');
+            
+            // Paso 2: Verificar si Firebase está inicializado
+            if (!firebase.apps || !firebase.apps.length) {
+                addLog("❌ Firebase no está inicializado", 'error');
+                updateStatus('diagnostico-status', 'Firebase no está inicializado. Aplica la configuración.', 'error');
+                return;
+            }
+            addLog("✅ Firebase está inicializado", 'success');
+            
+            // Paso 3: Verificar si Firestore está disponible
+            if (!firebase.firestore) {
+                addLog("❌ Firebase Firestore no está disponible", 'error');
+                updateStatus('diagnostico-status', 'Firestore no está disponible. Verifica los scripts.', 'error');
+                return;
+            }
+            addLog("✅ Firestore está disponible", 'success');
+            
+            // Paso 4: Verificar si Database está disponible
+            if (!firebase.database) {
+                addLog("❌ Firebase Realtime Database no está disponible", 'error');
+                updateStatus('diagnostico-status', 'Realtime Database no está disponible. Verifica los scripts.', 'error');
+                return;
+            }
+            addLog("✅ Realtime Database está disponible", 'success');
+            
+            // Paso 5: Verificar conexión a Realtime Database
+            try {
+                addLog("Verificando conexión a Realtime Database...");
+                const connectedRef = firebase.database().ref(".info/connected");
+                connectedRef.once("value")
+                    .then(snap => {
+                        const connected = snap.val() === true;
+                        if (connected) {
+                            addLog("✅ Conectado a Realtime Database", 'success');
+                        } else {
+                            addLog("❌ No conectado a Realtime Database", 'error');
+                            updateStatus('diagnostico-status', 'No se pudo conectar a Realtime Database', 'error');
+                            return Promise.reject(new Error("No conectado a Realtime Database"));
+                        }
+                        
+                        // Paso 6: Verificar conexión a Firestore
+                        addLog("Verificando conexión a Firestore...");
+                        return firebase.firestore().collection("_test_connection").doc("_test").set({
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    })
+                    .then(() => {
+                        addLog("✅ Conectado a Firestore", 'success');
+                        updateStatus('diagnostico-status', 'Conexión a Firebase establecida correctamente', 'success');
+                        
+                        // Limpiar el documento de prueba
+                        return firebase.firestore().collection("_test_connection").doc("_test").delete();
+                    })
+                    .catch(error => {
+                        addLog(`❌ Error: ${error.message}`, 'error');
+                        updateStatus('diagnostico-status', `Error: ${error.message}`, 'error');
+                    });
+            } catch (error) {
+                addLog(`❌ Error al verificar la conexión: ${error.message}`, 'error');
+                updateStatus('diagnostico-status', `Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Reiniciar Firebase
+        function reiniciarFirebase() {
+            try {
+                addLog("Reiniciando Firebase...");
+                
+                // Obtener la configuración actual o usar la guardada
+                let config;
+                const configText = document.getElementById('firebase-config').value.trim();
+                
+                if (configText) {
+                    config = JSON.parse(configText);
+                } else {
+                    const savedConfig = localStorage.getItem('firebaseConfig');
+                    if (savedConfig) {
+                        config = JSON.parse(savedConfig);
+                        document.getElementById('firebase-config').value = savedConfig;
+                    } else {
+                        addLog("❌ No hay configuración disponible para reiniciar Firebase", 'error');
+                        updateStatus('diagnostico-status', 'No hay configuración disponible', 'error');
+                        return;
+                    }
+                }
+                
+                // Desconectar todas las instancias existentes
+                if (firebase.apps.length) {
+                    addLog("Cerrando instancias existentes de Firebase...");
+                    firebase.apps.forEach(app => app.delete());
+                }
+                
+                // Reinicializar Firebase
+                firebase.initializeApp(config);
+                
+                addLog("✅ Firebase reiniciado correctamente", 'success');
+                updateStatus('diagnostico-status', 'Firebase reiniciado correctamente', 'success');
+                
+                // Verificar si la reinicialización funcionó
+                setTimeout(ejecutarDiagnostico, 1000);
+                
+            } catch (error) {
+                addLog(`❌ Error al reiniciar Firebase: ${error.message}`, 'error');
+                updateStatus('diagnostico-status', `Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Cargar configuración guardada al iniciar
+        window.addEventListener('load', () => {
+            const savedConfig = localStorage.getItem('firebaseConfig');
+            if (savedConfig) {
+                document.getElementById('firebase-config').value = savedConfig;
+                addLog("Configuración cargada desde localStorage", 'info');
+            }
+        });
+    </script>
+</body>
+</html>
+

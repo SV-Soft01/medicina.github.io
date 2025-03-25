@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Conexión Firebase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .connection-monitor {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            text-align: center;
+            width: 300px;
+        }
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            transition: background-color 0.3s ease;
+        }
+        .connected {
+            background-color: #4CAF50;
+        }
+        .disconnected {
+            background-color: #F44336;
+        }
+        .checking {
+            background-color: #FFC107;
+        }
+        .status-text {
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .last-updated {
+            font-size: 12px;
+            color: #666;
+        }
+        .floating-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            z-index: 9999;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-monitor">
+        <h2>Estado de Conexión a Firebase</h2>
+        <div id="statusIndicator" class="status-indicator checking"></div>
+        <div id="statusText" class="status-text">Verificando conexión...</div>
+        <div id="lastUpdated" class="last-updated"></div>
+        <button id="checkConnection">Verificar Ahora</button>
+    </div>
+
+    <div id="floatingIndicator" class="floating-indicator checking" title="Estado de conexión a Firebase"></div>
+
+    <!-- Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <!-- Firebase Database -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        // Configuración de Firebase - Reemplaza con tus propias credenciales
+        const firebaseConfig = {
+            // Aquí debes colocar tu configuración de Firebase
+            apiKey: "TU_API_KEY",
+            authDomain: "TU_AUTH_DOMAIN",
+            databaseURL: "TU_DATABASE_URL",
+            projectId: "TU_PROJECT_ID",
+            storageBucket: "TU_STORAGE_BUCKET",
+            messagingSenderId: "TU_MESSAGING_SENDER_ID",
+            appId: "TU_APP_ID"
+        };
+
+        // Elementos del DOM
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const lastUpdated = document.getElementById('lastUpdated');
+        const checkConnectionBtn = document.getElementById('checkConnection');
+        const floatingIndicator = document.getElementById('floatingIndicator');
+
+        // Inicializar Firebase si no está ya inicializado
+        if (!window.firebase || !firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        // Función para actualizar la UI según el estado de conexión
+        function updateConnectionStatus(isConnected) {
+            if (isConnected) {
+                statusIndicator.className = 'status-indicator connected';
+                floatingIndicator.className = 'floating-indicator connected';
+                statusText.textContent = 'Conectado a Firebase';
+                floatingIndicator.title = 'Conectado a Firebase';
+            } else {
+                statusIndicator.className = 'status-indicator disconnected';
+                floatingIndicator.className = 'floating-indicator disconnected';
+                statusText.textContent = 'Desconectado de Firebase';
+                floatingIndicator.title = 'Desconectado de Firebase';
+            }
+            
+            const now = new Date();
+            lastUpdated.textContent = `Última actualización: ${now.toLocaleTimeString()}`;
+        }
+
+        // Función para verificar la conexión a Firebase
+        function checkFirebaseConnection() {
+            try {
+                statusIndicator.className = 'status-indicator checking';
+                floatingIndicator.className = 'floating-indicator checking';
+                statusText.textContent = 'Verificando conexión...';
+                floatingIndicator.title = 'Verificando conexión...';
+
+                const connectedRef = firebase.database().ref('.info/connected');
+                
+                connectedRef.on('value', (snap) => {
+                    const connected = snap.val() === true;
+                    updateConnectionStatus(connected);
+                });
+                
+                return true;
+            } catch (error) {
+                console.error('Error al verificar la conexión a Firebase:', error);
+                updateConnectionStatus(false);
+                return false;
+            }
+        }
+
+        // Verificar conexión al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            checkFirebaseConnection();
+        });
+
+        // Verificar conexión cuando el botón es presionado
+        checkConnectionBtn.addEventListener('click', checkFirebaseConnection);
+
+        // Verificar conexión cuando la ventana vuelve a estar en foco
+        window.addEventListener('focus', checkFirebaseConnection);
+
+        // Verificar conexión cuando cambia el estado de la red
+        window.addEventListener('online', () => {
+            setTimeout(checkFirebaseConnection, 2000); // Esperar un poco para que la conexión se establezca
+        });
+        
+        window.addEventListener('offline', () => {
+            updateConnectionStatus(false);
+        });
+
+        // Hacer que el indicador flotante muestre el monitor completo al hacer clic
+        floatingIndicator.addEventListener('click', () => {
+            document.querySelector('.connection-monitor').style.display = 
+                document.querySelector('.connection-monitor').style.display === 'none' ? 'block' : 'none';
+        });
+    </script>
+</body>
+</html>
+
