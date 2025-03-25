@@ -992,7 +992,7 @@ function agregarNuevoProductoCompra() {
   document.getElementById("formNuevoProductoCompra").reset()
 }
 
-// Modificar la función finalizarCompra para manejar lotes
+// Modificar la función finalizarCompra para manejar lotes correctamente
 function finalizarCompra() {
   const proveedor = document.getElementById("proveedorCompra").value.trim()
   const fecha = document.getElementById("fechaCompra").value || new Date().toLocaleDateString()
@@ -1038,39 +1038,30 @@ function finalizarCompra() {
 
     // Si el producto ya existe en el inventario
     if (productoInventario) {
-      // Si el precio es diferente al último precio de compra, crear un nuevo lote
-      if (productoInventario.precioCompra !== p.precio) {
-        // Inicializar el array de lotes si no existe
-        if (!productoInventario.lotes) {
-          productoInventario.lotes = []
+      // Inicializar el array de lotes si no existe
+      if (!productoInventario.lotes) {
+        productoInventario.lotes = []
+
+        // Si no hay lotes pero hay cantidad, crear un lote inicial con el inventario existente
+        if (productoInventario.cantidad > 0) {
+          productoInventario.lotes.push({
+            cantidad: productoInventario.cantidad,
+            precioCompra: productoInventario.precioCompra,
+            fecha: productoInventario.fechaUltimaCompra || fecha,
+          })
         }
-
-        // Añadir un nuevo lote con el nuevo precio
-        productoInventario.lotes.push({
-          cantidad: p.cantidad,
-          precioCompra: p.precio,
-          fecha: fecha,
-        })
-
-        // Actualizar el precio de compra en el inventario (para mostrar el más reciente)
-        productoInventario.precioCompra = p.precio
-      } else {
-        // Si el precio es el mismo, simplemente aumentar la cantidad
-        if (!productoInventario.lotes || productoInventario.lotes.length === 0) {
-          // Si no hay lotes, crear uno
-          productoInventario.lotes = [
-            {
-              cantidad: productoInventario.cantidad,
-              precioCompra: productoInventario.precioCompra,
-              fecha: fecha,
-            },
-          ]
-        }
-
-        // Añadir la cantidad al último lote
-        const ultimoLote = productoInventario.lotes[productoInventario.lotes.length - 1]
-        ultimoLote.cantidad += p.cantidad
       }
+
+      // SIEMPRE crear un nuevo lote para la nueva compra, independientemente del precio
+      productoInventario.lotes.push({
+        cantidad: p.cantidad,
+        precioCompra: p.precio,
+        fecha: fecha,
+      })
+
+      // Actualizar el precio de compra en el inventario (para mostrar el más reciente)
+      productoInventario.precioCompra = p.precio
+      productoInventario.fechaUltimaCompra = fecha
 
       // Actualizar la cantidad total
       productoInventario.cantidad += p.cantidad
@@ -1085,6 +1076,7 @@ function finalizarCompra() {
         minimo: p.minimo || 5,
         etiqueta: p.etiqueta || "",
         fechaVencimiento: p.fechaVencimiento || "",
+        fechaUltimaCompra: fecha,
         lotes: [
           {
             cantidad: p.cantidad,
@@ -1250,18 +1242,21 @@ function buscarGananciasPorFecha() {
 
 // Actualizar la función actualizarCapital para calcular correctamente con lotes
 function actualizarCapital() {
+  // Calcular el capital en productos sumando el valor de cada lote individualmente
   capital.productos = inventario.reduce((total, producto) => {
     if (producto.lotes && producto.lotes.length > 0) {
       // Sumar el valor de todos los lotes
-      return (
-        total +
-        producto.lotes.reduce((subtotal, lote) => {
-          return subtotal + lote.cantidad * lote.precioCompra
-        }, 0)
-      )
+      const valorLotes = producto.lotes.reduce((subtotal, lote) => {
+        return subtotal + lote.cantidad * lote.precioCompra
+      }, 0)
+
+      console.log(`Producto ${producto.nombre}: Valor de lotes = ${valorLotes}`)
+      return total + valorLotes
     } else {
       // Si no hay lotes, usar el método tradicional
-      return total + producto.cantidad * producto.precioCompra
+      const valorTradicional = producto.cantidad * producto.precioCompra
+      console.log(`Producto ${producto.nombre}: Valor tradicional = ${valorTradicional}`)
+      return total + valorTradicional
     }
   }, 0)
 
@@ -1734,4 +1729,6 @@ try {
   // If there is an error, it means XLSX is not defined
   console.error("XLSX is not properly initialized. Make sure you have included the js-xlsx library.")
 }
+
+
 
