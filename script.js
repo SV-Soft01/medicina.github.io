@@ -782,7 +782,7 @@ function finalizarFactura() {
   if (tipoFactura === "contado") {
     facturas.push(factura)
     ganancias += gananciaFactura
-    capital.efectivo += total
+    capital.efectivo += total - gananciaFactura
     ingresos.push({
       fecha,
       monto: total,
