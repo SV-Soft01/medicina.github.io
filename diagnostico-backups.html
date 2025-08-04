@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnóstico de Backups - SV Soft</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button.success {
+            background-color: #27ae60;
+        }
+        button.warning {
+            background-color: #f39c12;
+        }
+        button.danger {
+            background-color: #e74c3c;
+        }
+        .log {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .backup-item {
+            border: 1px solid #bdc3c7;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #ecf0f1;
+        }
+        .backup-item.valid {
+            border-color: #27ae60;
+            background-color: #d5f4e6;
+        }
+        .backup-item.invalid {
+            border-color: #e74c3c;
+            background-color: #fadbd8;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .user-selector {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Diagnóstico de Backups - SV Soft</h1>
+            <p>Herramienta para diagnosticar y reparar problemas con las copias de seguridad</p>
+        </div>
+
+        <div class="user-selector">
+            <h3>Seleccionar Usuario</h3>
+            <input type="text" id="usuarioInput" placeholder="Ingresa tu nombre de usuario (ej: Vyg)" />
+            <button onclick="setUsuario()">Establecer Usuario</button>
+            <p id="usuarioActual">Usuario actual: <strong>No seleccionado</strong></p>
+        </div>
+
+        <div class="stats" id="statsContainer">
+            <div class="stat-card">
+                <div class="stat-number" id="totalBackups">0</div>
+                <div class="stat-label">Total Backups</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="validBackups">0</div>
+                <div class="stat-label">Backups Válidos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="invalidBackups">0</div>
+                <div class="stat-label">Backups Inválidos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="userBackups">0</div>
+                <div class="stat-label">Backups del Usuario</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🔧 Acciones de Diagnóstico</h3>
+            <button onclick="diagnosticarTodos()">Diagnosticar Todos los Backups</button>
+            <button onclick="listarBackupsUsuario()" class="success">Listar Backups del Usuario</button>
+            <button onclick="repararBackups()" class="warning">Reparar Backups Inválidos</button>
+            <button onclick="limpiarBackupsViejos()" class="danger">Limpiar Backups Antiguos</button>
+            <button onclick="exportarBackups()" class="success">Exportar Lista de Backups</button>
+        </div>
+
+        <div class="section">
+            <h3>📊 Resultados del Diagnóstico</h3>
+            <div id="resultados"></div>
+        </div>
+
+        <div class="section">
+            <h3>📝 Log de Actividad</h3>
+            <button onclick="limpiarLog()">Limpiar Log</button>
+            <div id="log" class="log">Esperando acciones...</div>
+        </div>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Configuración de Firebase (usa la misma que tu aplicación principal)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAcGVp9vggdrb7kAyiCPCYKRCj6VMtyfHc",
+            authDomain: "celular2-e60b9.firebaseapp.com",
+            projectId: "celular2-e60b9",
+            storageBucket: "celular2-e60b9.firebasestorage.app",
+            messagingSenderId: "508043920661",
+            appId: "1:508043920661:web:93bfc3fb21bbda18fd951c",
+            measurementId: "G-J07ZEWMSDH",
+            databaseURL: "https://celular2-e60b9-default-rtdb.firebaseio.com"
+        };
+
+        // Inicializar Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        let usuarioActual = null;
+        let todosLosBackups = [];
+
+        // Función para agregar logs
+        function addLog(mensaje, tipo = 'info') {
+            const logContainer = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            
+            let color = '#ecf0f1';
+            if (tipo === 'success') color = '#2ecc71';
+            if (tipo === 'error') color = '#e74c3c';
+            if (tipo === 'warning') color = '#f39c12';
+            
+            logEntry.innerHTML = `<span style="color: #95a5a6">[${timestamp}]</span> <span style="color: ${color}">${mensaje}</span>`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Función para limpiar log
+        function limpiarLog() {
+            document.getElementById('log').innerHTML = 'Log limpiado...';
+        }
+
+        // Función para establecer usuario
+        function setUsuario() {
+            const input = document.getElementById('usuarioInput');
+            usuarioActual = input.value.trim();
+            
+            if (usuarioActual) {
+                document.getElementById('usuarioActual').innerHTML = `Usuario actual: <strong>${usuarioActual}</strong>`;
+                addLog(`Usuario establecido: ${usuarioActual}`, 'success');
+            } else {
+                addLog('Por favor ingresa un nombre de usuario válido', 'error');
+            }
+        }
+
+        // Función para actualizar estadísticas
+        function actualizarStats(total, validos, invalidos, usuario) {
+            document.getElementById('totalBackups').textContent = total;
+            document.getElementById('validBackups').textContent = validos;
+            document.getElementById('invalidBackups').textContent = invalidos;
+            document.getElementById('userBackups').textContent = usuario;
+        }
+
+        // Función principal de diagnóstico
+        async function diagnosticarTodos() {
+            if (!usuarioActual) {
+                addLog('Por favor establece un usuario primero', 'error');
+                return;
+            }
+
+            addLog('Iniciando diagnóstico completo...', 'info');
+            
+            try {
+                const snapshot = await db.collection('backups').get();
+                todosLosBackups = [];
+                
+                let totalBackups = 0;
+                let backupsValidos = 0;
+                let backupsInvalidos = 0;
+                let backupsDelUsuario = 0;
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const backup = {
+                        id: doc.id,
+                        data: data,
+                        esValido: false,
+                        esDelUsuario: false,
+                        problemas: []
+                    };
+
+                    totalBackups++;
+
+                    // Verificar si tiene campo usuario
+                    if (!data.usuario) {
+                        backup.problemas.push('Falta campo usuario');
+                        
+                        // Intentar extraer usuario del ID del documento
+                        const match = doc.id.match(/^([^_]+)_/);
+                        if (match) {
+                            backup.usuarioExtraido = match[1];
+                            backup.problemas.push(`Usuario extraído del ID: ${match[1]}`);
+                        }
+                    }
+
+                    // Verificar si es del usuario actual
+                    const usuarioBackup = data.usuario || backup.usuarioExtraido;
+                    if (usuarioBackup && usuarioBackup.toLowerCase() === usuarioActual.toLowerCase()) {
+                        backup.esDelUsuario = true;
+                        backupsDelUsuario++;
+                    }
+
+                    // Verificar campos requeridos
+                    const camposRequeridos = ['inventario', 'facturas', 'compras', 'capital', 'ganancias'];
+                    camposRequeridos.forEach(campo => {
+                        if (!data.hasOwnProperty(campo)) {
+                            backup.problemas.push(`Falta campo: ${campo}`);
+                        }
+                    });
+
+                    // Verificar fecha
+                    if (!data.fechaBackup && !data.fechaCreacion) {
+                        backup.problemas.push('Falta fecha de backup');
+                    }
+
+                    // Determinar si es válido
+                    backup.esValido = backup.problemas.length === 0 || 
+                        (backup.problemas.length === 1 && backup.problemas[0].includes('Usuario extraído'));
+
+                    if (backup.esValido) {
+                        backupsValidos++;
+                    } else {
+                        backupsInvalidos++;
+                    }
+
+                    todosLosBackups.push(backup);
+                });
+
+                // Ordenar por fecha (más recientes primero)
+                todosLosBackups.sort((a, b) => {
+                    const fechaA = a.data.fechaBackup?.toDate() || new Date(a.id.split('_')[1] || 0);
+                    const fechaB = b.data.fechaBackup?.toDate() || new Date(b.id.split('_')[1] || 0);
+                    return fechaB - fechaA;
+                });
+
+                actualizarStats(totalBackups, backupsValidos, backupsInvalidos, backupsDelUsuario);
+                
+                addLog(`Diagnóstico completado: ${totalBackups} backups analizados`, 'success');
+                addLog(`Backups del usuario ${usuarioActual}: ${backupsDelUsuario}`, 'info');
+                
+                mostrarResultados();
+
+            } catch (error) {
+                addLog(`Error en diagnóstico: ${error.message}`, 'error');
+            }
+        }
+
+        // Función para mostrar resultados
+        function mostrarResultados() {
+            const container = document.getElementById('resultados');
+            container.innerHTML = '';
+
+            const backupsDelUsuario = todosLosBackups.filter(b => b.esDelUsuario);
+            
+            if (backupsDelUsuario.length === 0) {
+                container.innerHTML = '<p style="color: #e74c3c; font-weight: bold;">❌ No se encontraron backups para este usuario</p>';
+                return;
+            }
+
+            backupsDelUsuario.forEach(backup => {
+                const div = document.createElement('div');
+                div.className = `backup-item ${backup.esValido ? 'valid' : 'invalid'}`;
+                
+                const fecha = backup.data.fechaBackup?.toDate() || new Date(backup.id.split('_')[1] || 0);
+                const usuario = backup.data.usuario || backup.usuarioExtraido || 'Desconocido';
+                
+                div.innerHTML = `
+                    <h4>${backup.esValido ? '✅' : '❌'} ${backup.id}</h4>
+                    <p><strong>Usuario:</strong> ${usuario}</p>
+                    <p><strong>Fecha:</strong> ${fecha.toLocaleString()}</p>
+                    <p><strong>Descripción:</strong> ${backup.data.descripcion || 'Sin descripción'}</p>
+                    ${backup.problemas.length > 0 ? `<p><strong>Problemas:</strong> ${backup.problemas.join(', ')}</p>` : ''}
+                    <button onclick="verDetallesBackup('${backup.id}')">Ver Detalles</button>
+                    <button onclick="restaurarBackup('${backup.id}')" class="success">Restaurar</button>
+                    ${!backup.esValido ? `<button onclick="repararBackup('${backup.id}')" class="warning">Reparar</button>` : ''}
+                `;
+                
+                container.appendChild(div);
+            });
+        }
+
+        // Función para listar backups del usuario
+        async function listarBackupsUsuario() {
+            if (!usuarioActual) {
+                addLog('Por favor establece un usuario primero', 'error');
+                return;
+            }
+
+            if (todosLosBackups.length === 0) {
+                addLog('Ejecuta primero el diagnóstico completo', 'warning');
+                return;
+            }
+
+            const backupsDelUsuario = todosLosBackups.filter(b => b.esDelUsuario);
+            
+            addLog(`=== BACKUPS DEL USUARIO ${usuarioActual} ===`, 'info');
+            
+            if (backupsDelUsuario.length === 0) {
+                addLog('No se encontraron backups para este usuario', 'error');
+                return;
+            }
+
+            backupsDelUsuario.forEach((backup, index) => {
+                const fecha = backup.data.fechaBackup?.toDate() || new Date(backup.id.split('_')[1] || 0);
+                const estado = backup.esValido ? '✅ VÁLIDO' : '❌ INVÁLIDO';
+                addLog(`${index + 1}. ${backup.id} - ${fecha.toLocaleString()} - ${estado}`, 'info');
+            });
+        }
+
+        // Función para reparar backups
+        async function repararBackups() {
+            if (!usuarioActual) {
+                addLog('Por favor establece un usuario primero', 'error');
+                return;
+            }
+
+            const backupsInvalidos = todosLosBackups.filter(b => b.esDelUsuario && !b.esValido);
+            
+            if (backupsInvalidos.length === 0) {
+                addLog('No hay backups inválidos para reparar', 'info');
+                return;
+            }
+
+            addLog(`Reparando ${backupsInvalidos.length} backups...`, 'info');
+
+            for (const backup of backupsInvalidos) {
+                try {
+                    const updates = {};
+                    
+                    // Agregar campo usuario si falta
+                    if (!backup.data.usuario && backup.usuarioExtraido) {
+                        updates.usuario = backup.usuarioExtraido;
+                    }
+
+                    // Agregar fecha si falta
+                    if (!backup.data.fechaBackup && !backup.data.fechaCreacion) {
+                        const fechaExtraida = new Date(backup.id.split('_')[1] || Date.now());
+                        updates.fechaBackup = firebase.firestore.Timestamp.fromDate(fechaExtraida);
+                    }
+
+                    // Agregar descripción si falta
+                    if (!backup.data.descripcion) {
+                        updates.descripcion = `Backup reparado - ${new Date().toLocaleString()}`;
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        await db.collection('backups').doc(backup.id).update(updates);
+                        addLog(`✅ Reparado: ${backup.id}`, 'success');
+                    }
+
+                } catch (error) {
+                    addLog(`❌ Error reparando ${backup.id}: ${error.message}`, 'error');
+                }
+            }
+
+            addLog('Reparación completada. Ejecuta el diagnóstico nuevamente.', 'success');
+        }
+
+        // Función para ver detalles de un backup
+        function verDetallesBackup(backupId) {
+            const backup = todosLosBackups.find(b => b.id === backupId);
+            if (!backup) return;
+
+            const detalles = {
+                'ID': backup.id,
+                'Usuario': backup.data.usuario || backup.usuarioExtraido || 'Desconocido',
+                'Fecha': backup.data.fechaBackup?.toDate().toLocaleString() || 'Sin fecha',
+                'Descripción': backup.data.descripcion || 'Sin descripción',
+                'Inventario': Array.isArray(backup.data.inventario) ? `${backup.data.inventario.length} productos` : 'No disponible',
+                'Facturas': Array.isArray(backup.data.facturas) ? `${backup.data.facturas.length} facturas` : 'No disponible',
+                'Capital': backup.data.capital ? `Productos: ${backup.data.capital.productos || 0}, Efectivo: ${backup.data.capital.efectivo || 0}` : 'No disponible',
+                'Ganancias': backup.data.ganancias || 0,
+                'Problemas': backup.problemas.join(', ') || 'Ninguno'
+            };
+
+            let mensaje = `DETALLES DEL BACKUP: ${backupId}\n\n`;
+            for (const [key, value] of Object.entries(detalles)) {
+                mensaje += `${key}: ${value}\n`;
+            }
+
+            alert(mensaje);
+        }
+
+        // Función para restaurar un backup específico
+        function restaurarBackup(backupId) {
+            const backup = todosLosBackups.find(b => b.id === backupId);
+            if (!backup) return;
+
+            const fecha = backup.data.fechaBackup?.toDate() || new Date(backup.id.split('_')[1] || 0);
+            
+            if (confirm(`¿Estás seguro de que quieres restaurar el backup del ${fecha.toLocaleString()}?\n\nEsto sobrescribirá los datos actuales en tu aplicación principal.`)) {
+                // Guardar en localStorage para que la aplicación principal pueda acceder
+                localStorage.setItem('backup_to_restore', JSON.stringify(backup.data));
+                
+                addLog(`✅ Backup preparado para restauración: ${backupId}`, 'success');
+                addLog('Ve a tu aplicación principal y usa la función "Restaurar Datos"', 'info');
+                
+                alert('Backup preparado para restauración.\n\nVe a tu aplicación principal y haz clic en "Restaurar Datos".\nEl sistema detectará automáticamente el backup seleccionado.');
+            }
+        }
+
+        // Función para exportar lista de backups
+        function exportarBackups() {
+            if (todosLosBackups.length === 0) {
+                addLog('No hay backups para exportar. Ejecuta el diagnóstico primero.', 'warning');
+                return;
+            }
+
+            const backupsDelUsuario = todosLosBackups.filter(b => b.esDelUsuario);
+            
+            let csv = 'ID,Usuario,Fecha,Descripcion,Estado,Problemas\n';
+            
+            backupsDelUsuario.forEach(backup => {
+                const fecha = backup.data.fechaBackup?.toDate() || new Date(backup.id.split('_')[1] || 0);
+                const usuario = backup.data.usuario || backup.usuarioExtraido || 'Desconocido';
+                const estado = backup.esValido ? 'VÁLIDO' : 'INVÁLIDO';
+                const problemas = backup.problemas.join('; ');
+                
+                csv += `"${backup.id}","${usuario}","${fecha.toLocaleString()}","${backup.data.descripcion || ''}","${estado}","${problemas}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backups_${usuarioActual}_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            addLog('Lista de backups exportada como CSV', 'success');
+        }
+
+        // Función para limpiar backups antiguos
+        async function limpiarBackupsViejos() {
+            if (!usuarioActual) {
+                addLog('Por favor establece un usuario primero', 'error');
+                return;
+            }
+
+            const diasAtras = prompt('¿Cuántos días hacia atrás quieres mantener los backups? (ej: 30)', '30');
+            if (!diasAtras || isNaN(diasAtras)) return;
+
+            const fechaLimite = new Date();
+            fechaLimite.setDate(fechaLimite.getDate() - parseInt(diasAtras));
+
+            const backupsViejos = todosLosBackups.filter(backup => {
+                if (!backup.esDelUsuario) return false;
+                const fechaBackup = backup.data.fechaBackup?.toDate() || new Date(backup.id.split('_')[1] || 0);
+                return fechaBackup < fechaLimite;
+            });
+
+            if (backupsViejos.length === 0) {
+                addLog(`No hay backups anteriores a ${fechaLimite.toLocaleDateString()}`, 'info');
+                return;
+            }
+
+            if (!confirm(`Se eliminarán ${backupsViejos.length} backups anteriores a ${fechaLimite.toLocaleDateString()}.\n\n¿Continuar?`)) {
+                return;
+            }
+
+            addLog(`Eliminando ${backupsViejos.length} backups antiguos...`, 'warning');
+
+            for (const backup of backupsViejos) {
+                try {
+                    await db.collection('backups').doc(backup.id).delete();
+                    addLog(`🗑️ Eliminado: ${backup.id}`, 'info');
+                } catch (error) {
+                    addLog(`❌ Error eliminando ${backup.id}: ${error.message}`, 'error');
+                }
+            }
+
+            addLog('Limpieza completada', 'success');
+        }
+
+        // Inicialización
+        addLog('Herramienta de diagnóstico de backups iniciada', 'success');
+        addLog('1. Ingresa tu nombre de usuario', 'info');
+        addLog('2. Haz clic en "Diagnosticar Todos los Backups"', 'info');
+        addLog('3. Revisa los resultados y usa las herramientas de reparación si es necesario', 'info');
+    </script>
+</body>
+</html>
