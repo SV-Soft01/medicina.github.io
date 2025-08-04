@@ -45,6 +45,13 @@
     </script> 
 </head>
 <body>
+ <!-- INDICADOR DE INTERNET - COPIAR ESTE CÓDIGO -->
+<div id="internetIndicator" class="internet-indicator checking" data-tooltip="Verificando conexión...">
+    ⏳
+</div>
+
+<div id="connectionNotification" class="connection-notification"></div>
+<!-- FIN DEL CÓDIGO HTML DEL INDICADOR -->
     <header>
         <h1 id="companyName">SV Soft</h1>
         <nav id="mainNav" style="display:none;">
@@ -291,8 +298,9 @@
             </div>
         </section>
     </main>
-
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
     <script src="script.js"></script>
+   
 </body>
 </html>
