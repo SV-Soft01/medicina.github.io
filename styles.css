@@ -11,6 +11,109 @@ header {
   color: #fff;
   text-align: center;
   padding: 1rem;
+
+ /* ESTILOS DEL INDICADOR DE INTERNET - COPIAR ESTE CÓDIGO */
+.internet-indicator {
+    position: fixed !important; /* ¡Esto lo mantiene fijo en la pantalla! */
+    top: 20px !important;      /* Distancia desde la parte superior de la pantalla */
+    left: 20px !important;     /* Distancia desde la parte izquierda de la pantalla */
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 24px !important;
+    font-weight: bold !important;
+    color: white !important;
+    z-index: 99999 !important; /* Asegura que esté por encima de todo */
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+    border: 3px solid white !important;
+    transform: translateZ(0) !important; /* Ayuda a asegurar el posicionamiento fijo */
+}
+
+.internet-indicator.online {
+    background: linear-gradient(135deg, #4CAF50, #45a049) !important;
+    animation: none !important;
+}
+
+.internet-indicator.offline {
+    background: linear-gradient(135deg, #f44336, #d32f2f) !important;
+    animation: blink 1s infinite !important;
+}
+
+.internet-indicator.checking {
+    background: linear-gradient(135deg, #ff9800, #f57c00) !important;
+    animation: pulse 1.5s infinite !important;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.5; }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.internet-indicator:hover {
+    transform: scale(1.1) !important;
+}
+
+/* Tooltip */
+.internet-indicator::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 70px; /* Ajustado para que el tooltip aparezca debajo del círculo */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.internet-indicator:hover::after {
+    opacity: 1;
+}
+
+/* Notificación */
+.connection-notification {
+    position: fixed !important;
+    top: 20px !important; /* Se mantiene arriba, pero a la derecha */
+    right: 20px !important;
+    padding: 15px 20px !important;
+    border-radius: 8px !important;
+    color: white !important;
+    font-weight: bold !important;
+    z-index: 99998 !important;
+    transform: translateX(100%) !important;
+    transition: transform 0.3s ease !important;
+    max-width: 250px !important;
+    font-size: 14px !important;
+}
+
+.connection-notification.show {
+    transform: translateX(0) !important;
+}
+
+.connection-notification.success {
+    background-color: #4CAF50 !important;
+}
+
+.connection-notification.error {
+    background-color: #f44336 !important;
+}
+/* FIN DE LOS ESTILOS DEL INDICADOR */
 }
 
 nav {
