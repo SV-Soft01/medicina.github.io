@@ -34,9 +34,30 @@ function mostrarSeccion(seccion) {
   document.getElementById(seccion).style.display = "block"
 }
 
-// Función para guardar datos en el almacenamiento local y en Firestore
+// Función para guardar datos solo en Firestore (sin localStorage)
 function guardarDatos() {
-  // Guardar en localStorage (mantener la funcionalidad original)
+  if (!usuarioActual) {
+    console.error("No hay usuario activo para guardar datos")
+    return
+  }
+
+  // Mostrar indicador de guardado
+  const indicador = document.createElement("div")
+  indicador.id = "indicadorGuardado"
+  indicador.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background-color: #3498db;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    z-index: 9999;
+    font-size: 14px;
+  `
+  indicador.textContent = "Guardando..."
+  document.body.appendChild(indicador)
+
   const datos = {
     inventario,
     facturas,
@@ -47,181 +68,216 @@ function guardarDatos() {
     gastos,
     capital,
     ganancias,
+    ultimaActualizacion: firebase.firestore.FieldValue.serverTimestamp(),
   }
-  localStorage.setItem(`datos_${usuarioActual}`, JSON.stringify(datos))
 
-  // Guardar en Firestore
-  try {
+  // Guardar en Firestore con reintentos
+  const guardarConReintentos = (intentos = 3) => {
     firebase
       .firestore()
       .collection("usuarios")
       .doc(usuarioActual)
-      .set({
-        inventario,
-        facturas,
-        compras,
-        cuentasCobrar,
-        cuentasPagar,
-        ingresos,
-        gastos,
-        capital,
-        ganancias,
-        ultimaActualizacion: firebase.firestore.FieldValue.serverTimestamp(),
-      })
+      .set(datos)
       .then(() => {
+        // Éxito - actualizar indicador
+        if (document.getElementById("indicadorGuardado")) {
+          indicador.style.backgroundColor = "#27ae60"
+          indicador.textContent = "✓ Guardado"
+          setTimeout(() => {
+            if (document.body.contains(indicador)) {
+              document.body.removeChild(indicador)
+            }
+          }, 2000)
+        }
         console.log("Datos guardados en Firestore correctamente")
       })
       .catch((error) => {
         console.error("Error al guardar datos en Firestore:", error)
-        alert("Error al guardar datos en la nube. Los datos se han guardado localmente.")
-      })
-  } catch (error) {
-    console.error("Error al guardar datos en Firestore:", error)
-    alert("Error al guardar datos en la nube. Los datos se han guardado localmente.")
-  }
-}
 
-// Función para cargar datos del almacenamiento local y de Firestore
-function cargarDatos() {
-  // Intentar cargar desde Firestore primero
-  try {
-    const db = firebase.firestore()
-    db.collection("usuarios")
-      .doc(usuarioActual)
-      .get()
-      .then((doc) => {
-        if (doc.exists) {
-          const datosFirestore = doc.data()
-          console.log("Datos cargados desde Firestore")
-
-          // Cargar datos desde Firestore
-          inventario = datosFirestore.inventario || []
-          facturas = datosFirestore.facturas || []
-          compras = datosFirestore.compras || []
-          cuentasCobrar = datosFirestore.cuentasCobrar || []
-          cuentasPagar = datosFirestore.cuentasPagar || []
-          ingresos = datosFirestore.ingresos || []
-          gastos = datosFirestore.gastos || []
-          capital = datosFirestore.capital || { productos: 0, efectivo: 0 }
-          ganancias = datosFirestore.ganancias || 0
-
-          // Actualizar la interfaz
-          actualizarTablaInventario()
-          actualizarTablaFacturas()
-          actualizarTablaCuentasCobrar()
-          actualizarTablaCompras()
-          actualizarTablaCuentasPagar()
-          actualizarGanancias()
-          actualizarCapital()
-
-          // Guardar también en localStorage como respaldo
-          guardarDatosLocal()
+        if (intentos > 1) {
+          // Reintentar
+          console.log(`Reintentando guardado... (${4 - intentos}/3)`)
+          setTimeout(() => guardarConReintentos(intentos - 1), 1000)
         } else {
-          console.log("No hay datos en Firestore, cargando desde localStorage")
-          cargarDatosLocal()
+          // Error final
+          if (document.getElementById("indicadorGuardado")) {
+            indicador.style.backgroundColor = "#e74c3c"
+            indicador.textContent = "✗ Error al guardar"
+            setTimeout(() => {
+              if (document.body.contains(indicador)) {
+                document.body.removeChild(indicador)
+              }
+            }, 5000)
+          }
+          alert("Error al guardar datos. Por favor, verifica tu conexión e intenta nuevamente.")
         }
       })
-      .catch((error) => {
-        console.error("Error al cargar datos desde Firestore:", error)
-        cargarDatosLocal()
-      })
-  } catch (error) {
-    console.error("Error al cargar datos desde Firestore:", error)
-    cargarDatosLocal()
   }
+
+  guardarConReintentos()
 }
 
-// Función para guardar datos solo en localStorage (como respaldo)
+// Función para cargar datos solo desde Firestore
+function cargarDatos() {
+  if (!usuarioActual) {
+    console.error("No hay usuario activo para cargar datos")
+    return
+  }
+
+  // Mostrar indicador de carga
+  const indicador = document.createElement("div")
+  indicador.id = "indicadorCarga"
+  indicador.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 10000;
+    text-align: center;
+  `
+  indicador.innerHTML = `
+    <div style="margin-bottom: 10px;">Cargando datos...</div>
+    <div style="width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+  `
+  document.body.appendChild(indicador)
+
+  const db = firebase.firestore()
+  db.collection("usuarios")
+    .doc(usuarioActual)
+    .get()
+    .then((doc) => {
+      if (doc.exists) {
+        const datosFirestore = doc.data()
+        console.log("Datos cargados desde Firestore")
+
+        // Cargar datos desde Firestore
+        inventario = datosFirestore.inventario || []
+        facturas = datosFirestore.facturas || []
+        compras = datosFirestore.compras || []
+        cuentasCobrar = datosFirestore.cuentasCobrar || []
+        cuentasPagar = datosFirestore.cuentasPagar || []
+        ingresos = datosFirestore.ingresos || []
+        gastos = datosFirestore.gastos || []
+        capital = datosFirestore.capital || { productos: 0, efectivo: 0 }
+        ganancias = datosFirestore.ganancias || 0
+
+        // Actualizar la interfaz
+        actualizarTablaInventario()
+        actualizarTablaFacturas()
+        actualizarTablaCuentasCobrar()
+        actualizarTablaCompras()
+        actualizarTablaCuentasPagar()
+        actualizarGanancias()
+        actualizarCapital()
+
+        // Remover indicador de carga
+        if (document.body.contains(indicador)) {
+          document.body.removeChild(indicador)
+        }
+      } else {
+        console.log("No hay datos en Firestore para este usuario")
+
+        // Inicializar con datos vacíos
+        inventario = []
+        facturas = []
+        compras = []
+        cuentasCobrar = []
+        cuentasPagar = []
+        ingresos = []
+        gastos = []
+        capital = { productos: 0, efectivo: 0 }
+        ganancias = 0
+
+        // Actualizar la interfaz
+        actualizarTablaInventario()
+        actualizarTablaFacturas()
+        actualizarTablaCuentasCobrar()
+        actualizarTablaCompras()
+        actualizarTablaCuentasPagar()
+        actualizarGanancias()
+        actualizarCapital()
+
+        // Remover indicador de carga
+        if (document.body.contains(indicador)) {
+          document.body.removeChild(indicador)
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error al cargar datos desde Firestore:", error)
+
+      // Remover indicador de carga
+      if (document.body.contains(indicador)) {
+        document.body.removeChild(indicador)
+      }
+
+      alert("Error al cargar datos. Por favor, verifica tu conexión e intenta nuevamente.")
+    })
+}
+
+// Funciones de localStorage convertidas en no-op (no hacen nada)
 function guardarDatosLocal() {
-  const datos = {
-    inventario,
-    facturas,
-    compras,
-    cuentasCobrar,
-    cuentasPagar,
-    ingresos,
-    gastos,
-    capital,
-    ganancias,
-  }
-  localStorage.setItem(`datos_${usuarioActual}`, JSON.stringify(datos))
+  // Esta función ya no hace nada - solo Firebase
+  console.log("localStorage desactivado - usando solo Firebase")
 }
 
-// Función para cargar datos solo desde localStorage
 function cargarDatosLocal() {
-  const datosGuardados = localStorage.getItem(`datos_${usuarioActual}`)
-  if (datosGuardados) {
-    const datos = JSON.parse(datosGuardados)
-    inventario = datos.inventario || []
-    facturas = datos.facturas || []
-    compras = datos.compras || []
-    cuentasCobrar = datos.cuentasCobrar || []
-    cuentasPagar = datos.cuentasPagar || []
-    ingresos = datos.ingresos || []
-    gastos = datos.gastos || []
-    capital = datos.capital || { productos: 0, efectivo: 0 }
-    ganancias = datos.ganancias || 0
-    console.log("Datos cargados desde localStorage")
-
-    // Actualizar la interfaz
-    actualizarTablaInventario()
-    actualizarTablaFacturas()
-    actualizarTablaCuentasCobrar()
-    actualizarTablaCompras()
-    actualizarTablaCuentasPagar()
-    actualizarGanancias()
-    actualizarCapital()
-  }
+  // Esta función ya no hace nada - solo Firebase
+  console.log("localStorage desactivado - usando solo Firebase")
 }
 
-// Función para sincronizar datos con Firestore
+// Función para sincronizar datos con Firestore (mejorada)
 function sincronizarDatos() {
-  if (!usuarioActual) return
-
-  try {
-    const spinner = document.createElement("div")
-    spinner.className = "spinner"
-    spinner.innerHTML = "Sincronizando..."
-    spinner.style.position = "fixed"
-    spinner.style.top = "50%"
-    spinner.style.left = "50%"
-    spinner.style.transform = "translate(-50%, -50%)"
-    spinner.style.backgroundColor = "rgba(0,0,0,0.7)"
-    spinner.style.color = "white"
-    spinner.style.padding = "20px"
-    spinner.style.borderRadius = "5px"
-    spinner.style.zIndex = "9999"
-    document.body.appendChild(spinner)
-
-    firebase
-      .firestore()
-      .collection("usuarios")
-      .doc(usuarioActual)
-      .set({
-        inventario,
-        facturas,
-        compras,
-        cuentasCobrar,
-        cuentasPagar,
-        ingresos,
-        gastos,
-        capital,
-        ganancias,
-        ultimaActualizacion: firebase.firestore.FieldValue.serverTimestamp(),
-      })
-      .then(() => {
-        document.body.removeChild(spinner)
-        alert("Datos sincronizados correctamente con la nube")
-      })
-      .catch((error) => {
-        document.body.removeChild(spinner)
-        console.error("Error al sincronizar datos:", error)
-        alert("Error al sincronizar datos con la nube")
-      })
-  } catch (error) {
-    console.error("Error al sincronizar datos:", error)
-    alert("Error al sincronizar datos con la nube")
+  if (!usuarioActual) {
+    alert("Debe iniciar sesión para sincronizar datos")
+    return
   }
+
+  const spinner = document.createElement("div")
+  spinner.className = "spinner"
+  spinner.innerHTML = "Sincronizando..."
+  spinner.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0,0,0,0.7);
+    color: white;
+    padding: 20px;
+    border-radius: 5px;
+    z-index: 9999;
+  `
+  document.body.appendChild(spinner)
+
+  firebase
+    .firestore()
+    .collection("usuarios")
+    .doc(usuarioActual)
+    .set({
+      inventario,
+      facturas,
+      compras,
+      cuentasCobrar,
+      cuentasPagar,
+      ingresos,
+      gastos,
+      capital,
+      ganancias,
+      ultimaActualizacion: firebase.firestore.FieldValue.serverTimestamp(),
+    })
+    .then(() => {
+      document.body.removeChild(spinner)
+      mostrarNotificacion("Datos sincronizados correctamente", "success")
+    })
+    .catch((error) => {
+      document.body.removeChild(spinner)
+      console.error("Error al sincronizar datos:", error)
+      mostrarNotificacion("Error al sincronizar datos: " + error.message, "error")
+    })
 }
 
 // Manejo del formulario de inicio de sesión
@@ -1289,7 +1345,6 @@ function anadirGananciasCapital() {
   capital.efectivo += monto
   ganancias -= monto
   actualizarCapital()
-  actualizarGanancias()
   guardarDatos()
   alert(`Se han añadido ${monto.toFixed(2)} de las ganancias al capital.`)
   document.getElementById("montoGananciasCapital").value = ""
@@ -1464,6 +1519,466 @@ function calcularVuelto() {
   }
 }
 
+// Función mejorada para realizar una copia de seguridad en Firestore
+function realizarBackup() {
+  if (!usuarioActual) {
+    alert("Debe iniciar sesión para realizar una copia de seguridad")
+    return
+  }
+
+  // Mostrar spinner de carga
+  const spinner = crearSpinner("Creando copia de seguridad...")
+  document.body.appendChild(spinner)
+
+  try {
+    const timestamp = new Date().toISOString()
+    const backupId = `${usuarioActual}_${timestamp.replace(/[:.]/g, "-")}`
+
+    const backupData = {
+      usuario: usuarioActual, // Asegurar que el campo usuario esté presente
+      inventario,
+      facturas,
+      compras,
+      cuentasCobrar,
+      cuentasPagar,
+      ingresos,
+      gastos,
+      capital,
+      ganancias,
+      fechaBackup: firebase.firestore.FieldValue.serverTimestamp(),
+      descripcion: `Backup automático - ${new Date().toLocaleString()}`,
+      fechaCreacion: new Date().toISOString(), // Campo adicional para ordenamiento
+    }
+
+    firebase
+      .firestore()
+      .collection("backups")
+      .doc(backupId)
+      .set(backupData)
+      .then(() => {
+        document.body.removeChild(spinner)
+        mostrarNotificacion("Copia de seguridad realizada correctamente", "success")
+        console.log("Backup creado con ID:", backupId)
+      })
+      .catch((error) => {
+        document.body.removeChild(spinner)
+        console.error("Error al realizar copia de seguridad:", error)
+        mostrarNotificacion("Error al realizar copia de seguridad: " + error.message, "error")
+      })
+  } catch (error) {
+    document.body.removeChild(spinner)
+    console.error("Error al realizar copia de seguridad:", error)
+    mostrarNotificacion("Error al realizar copia de seguridad: " + error.message, "error")
+  }
+}
+
+// Función mejorada para restaurar datos desde Firestore sin requerir índices compuestos
+function restaurarDatos() {
+  if (!usuarioActual) {
+    alert("Debe iniciar sesión para restaurar datos")
+    return
+  }
+
+  // Mostrar spinner de carga
+  const spinner = crearSpinner("Cargando copias de seguridad...")
+  document.body.appendChild(spinner)
+
+  try {
+    // Usar una consulta más simple que no requiere índice compuesto
+    // Primero obtenemos todos los backups y luego filtramos en el cliente
+    firebase
+      .firestore()
+      .collection("backups")
+      .orderBy("fechaBackup", "desc")
+      .limit(50) // Obtener más para filtrar después
+      .get()
+      .then((querySnapshot) => {
+        document.body.removeChild(spinner)
+
+        if (querySnapshot.empty) {
+          mostrarNotificacion("No hay copias de seguridad disponibles", "warning")
+          return
+        }
+
+        // Filtrar backups del usuario actual en el cliente
+        const backups = []
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+
+          // Solo incluir backups del usuario actual
+          if (data.usuario === usuarioActual) {
+            backups.push({
+              id: doc.id,
+              fecha: data.fechaBackup ? data.fechaBackup.toDate() : new Date(),
+              descripcion: data.descripcion || "Backup sin descripción",
+              data: data,
+            })
+          }
+        })
+
+        // Limitar a los últimos 20 backups del usuario
+        const backupsLimitados = backups.slice(0, 20)
+
+        if (backupsLimitados.length === 0) {
+          mostrarNotificacion("No hay copias de seguridad disponibles para este usuario", "warning")
+          return
+        }
+
+        // Mostrar modal de selección de backup
+        mostrarModalSeleccionBackup(backupsLimitados)
+      })
+      .catch((error) => {
+        document.body.removeChild(spinner)
+        console.error("Error al obtener backups desde Firestore:", error)
+
+        // Si hay error con la consulta ordenada, intentar consulta más simple
+        if (error.code === "failed-precondition") {
+          restaurarDatosSimple()
+        } else {
+          mostrarNotificacion("Error al cargar copias de seguridad: " + error.message, "error")
+        }
+      })
+  } catch (error) {
+    document.body.removeChild(spinner)
+    console.error("Error al restaurar datos:", error)
+    mostrarNotificacion("Error al restaurar datos: " + error.message, "error")
+  }
+}
+
+// Función alternativa con consulta aún más simple
+function restaurarDatosSimple() {
+  const spinner = crearSpinner("Cargando copias de seguridad (modo simple)...")
+  document.body.appendChild(spinner)
+
+  try {
+    // Consulta muy simple sin ordenamiento
+    firebase
+      .firestore()
+      .collection("backups")
+      .get()
+      .then((querySnapshot) => {
+        document.body.removeChild(spinner)
+
+        if (querySnapshot.empty) {
+          mostrarNotificacion("No hay copias de seguridad disponibles", "warning")
+          return
+        }
+
+        // Filtrar y ordenar backups del usuario actual en el cliente
+        const backups = []
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+
+          // Solo incluir backups del usuario actual
+          if (data.usuario === usuarioActual) {
+            backups.push({
+              id: doc.id,
+              fecha: data.fechaBackup ? data.fechaBackup.toDate() : new Date(),
+              descripcion: data.descripcion || "Backup sin descripción",
+              data: data,
+            })
+          }
+        })
+
+        // Ordenar por fecha (más reciente primero) y limitar
+        backups.sort((a, b) => b.fecha - a.fecha)
+        const backupsLimitados = backups.slice(0, 20)
+
+        if (backupsLimitados.length === 0) {
+          mostrarNotificacion("No hay copias de seguridad disponibles para este usuario", "warning")
+          return
+        }
+
+        // Mostrar modal de selección de backup
+        mostrarModalSeleccionBackup(backupsLimitados)
+      })
+      .catch((error) => {
+        document.body.removeChild(spinner)
+        console.error("Error al obtener backups:", error)
+        mostrarNotificacion("Error al cargar copias de seguridad: " + error.message, "error")
+      })
+  } catch (error) {
+    document.body.removeChild(spinner)
+    console.error("Error al restaurar datos:", error)
+    mostrarNotificación("Error al restaurar datos: " + error.message, "error")
+  }
+}
+
+// Función para crear un spinner de carga
+function crearSpinner(mensaje = "Cargando...") {
+  const spinner = document.createElement("div")
+  spinner.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    color: white;
+    font-size: 18px;
+  `
+
+  spinner.innerHTML = `
+    <div style="
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    "></div>
+    <div>${mensaje}</div>
+  `
+
+  return spinner
+}
+
+// Función para mostrar notificaciones
+function mostrarNotificacion(mensaje, tipo = "info") {
+  const notificacion = document.createElement("div")
+  notificacion.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 5px;
+    color: white;
+    z-index: 10001;
+    max-width: 400px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    animation: slideIn 0.3s ease-out;
+  `
+
+  const colores = {
+    success: "#4CAF50",
+    error: "#F44336",
+    warning: "#FF9800",
+    info: "#2196F3",
+  }
+
+  notificacion.style.backgroundColor = colores[tipo] || colores.info
+  notificacion.textContent = mensaje
+
+  document.body.appendChild(notificacion)
+
+  // Auto-remover después de 5 segundos
+  setTimeout(() => {
+    if (notificacion.parentNode) {
+      notificacion.style.animation = "slideOut 0.3s ease-in"
+      setTimeout(() => {
+        document.body.removeChild(notificacion)
+      }, 300)
+    }
+  }, 5000)
+}
+
+// Función para mostrar modal de selección de backup
+function mostrarModalSeleccionBackup(backups) {
+  // Crear overlay del modal
+  const overlay = document.createElement("div")
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+  `
+
+  // Crear contenido del modal
+  const modal = document.createElement("div")
+  modal.style.cssText = `
+    background-color: white;
+    border-radius: 10px;
+    padding: 30px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  `
+
+  modal.innerHTML = `
+    <h2 style="margin-top: 0; color: #333; text-align: center;">Seleccionar Copia de Seguridad</h2>
+    <p style="color: #666; text-align: center; margin-bottom: 20px;">
+      Selecciona la copia de seguridad que deseas restaurar:
+    </p>
+    <div id="listaBackups" style="margin-bottom: 20px;"></div>
+    <div style="text-align: center;">
+      <button id="btnCancelarRestore" style="
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-right: 10px;
+      ">Cancelar</button>
+    </div>
+  `
+
+  // Crear lista de backups
+  const listaBackups = modal.querySelector("#listaBackups")
+
+  backups.forEach((backup, index) => {
+    const backupItem = document.createElement("div")
+    backupItem.style.cssText = `
+      border: 2px solid #e9ecef;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background-color: #f8f9fa;
+    `
+
+    backupItem.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-weight: bold; color: #333; margin-bottom: 5px;">
+            ${backup.descripcion}
+          </div>
+          <div style="color: #666; font-size: 14px;">
+            ${backup.fecha.toLocaleString()}
+          </div>
+        </div>
+        <button class="btn-restaurar" data-index="${index}" style="
+          background-color: #28a745;
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 14px;
+        ">Restaurar</button>
+      </div>
+    `
+
+    // Hover effects
+    backupItem.addEventListener("mouseenter", () => {
+      backupItem.style.borderColor = "#007bff"
+      backupItem.style.backgroundColor = "#e3f2fd"
+    })
+
+    backupItem.addEventListener("mouseleave", () => {
+      backupItem.style.borderColor = "#e9ecef"
+      backupItem.style.backgroundColor = "#f8f9fa"
+    })
+
+    listaBackups.appendChild(backupItem)
+  })
+
+  // Event listeners
+  modal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("btn-restaurar")) {
+      const index = Number.parseInt(e.target.dataset.index)
+      const backupSeleccionado = backups[index]
+
+      if (
+        confirm(
+          `¿Está seguro de que desea restaurar la copia de seguridad del ${backupSeleccionado.fecha.toLocaleString()}?\n\nEsto sobrescribirá todos los datos actuales.`,
+        )
+      ) {
+        document.body.removeChild(overlay)
+        ejecutarRestauracion(backupSeleccionado.data)
+      }
+    }
+  })
+
+  modal.querySelector("#btnCancelarRestore").addEventListener("click", () => {
+    document.body.removeChild(overlay)
+  })
+
+  // Cerrar modal al hacer clic fuera
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      document.body.removeChild(overlay)
+    }
+  })
+
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+}
+
+// Función para ejecutar la restauración de datos
+function ejecutarRestauracion(datosBackup) {
+  const spinner = crearSpinner("Restaurando datos...")
+  document.body.appendChild(spinner)
+
+  try {
+    // Restaurar datos desde el backup
+    inventario = datosBackup.inventario || []
+    facturas = datosBackup.facturas || []
+    compras = datosBackup.compras || []
+    cuentasCobrar = datosBackup.cuentasCobrar || []
+    cuentasPagar = datosBackup.cuentasPagar || []
+    ingresos = datosBackup.ingresos || []
+    gastos = datosBackup.gastos || []
+    capital = datosBackup.capital || { productos: 0, efectivo: 0 }
+    ganancias = datosBackup.ganancias || 0
+
+    // Actualizar interfaz
+    actualizarTablaInventario()
+    actualizarTablaFacturas()
+    actualizarTablaCuentasCobrar()
+    actualizarTablaCompras()
+    actualizarTablaCuentasPagar()
+    actualizarGanancias()
+    actualizarCapital()
+
+    // Guardar en localStorage como respaldo
+    guardarDatosLocal()
+
+    // Sincronizar con Firestore
+    sincronizarDatos()
+
+    setTimeout(() => {
+      document.body.removeChild(spinner)
+      mostrarNotificacion("Datos restaurados correctamente", "success")
+    }, 1000)
+  } catch (error) {
+    document.body.removeChild(spinner)
+    console.error("Error al restaurar datos:", error)
+    mostrarNotificacion("Error al restaurar datos: " + error.message, "error")
+  }
+}
+
+// Detectar estado de conexión para modo offline
+window.addEventListener("online", () => {
+  const statusIndicator = document.getElementById("firebaseStatus")
+  if (statusIndicator) {
+    statusIndicator.style.backgroundColor = "#4CAF50"
+    statusIndicator.title = "Conectado a Firebase"
+  }
+
+  if (usuarioActual) {
+    sincronizarDatos()
+    console.log("Datos sincronizados después de recuperar conexión")
+  }
+})
+
+window.addEventListener("offline", () => {
+  const statusIndicator = document.getElementById("firebaseStatus")
+  if (statusIndicator) {
+    statusIndicator.style.backgroundColor = "#F44336"
+    statusIndicator.title = "Desconectado de Firebase - Modo local activado"
+  }
+
+  mostrarNotificacion(
+    "Conexión perdida. La aplicación funcionará en modo local hasta que se restablezca la conexión.",
+    "warning",
+  )
+})
+
 // Inicialización
 window.onload = () => {
   mostrarSeccion("login")
@@ -1516,177 +2031,45 @@ window.onload = () => {
     mainNav.appendChild(btnRestore)
   }
 
-  // Add event listeners for the buttons
-  const btnFinalizarFactura = document.querySelector('button[onclick="finalizarFactura()"]')
-  if (btnFinalizarFactura) {
-    btnFinalizarFactura.addEventListener("click", finalizarFactura)
-  }
-
-  const btnFinalizarCompra = document.querySelector('button[onclick="finalizarCompra()"]')
-  if (btnFinalizarCompra) {
-    btnFinalizarCompra.addEventListener("click", finalizarCompra)
-  }
-
   // Establecer fecha actual en campos de fecha
   document.getElementById("fechaFactura").value = new Date().toLocaleDateString()
   const fechaCompra = document.getElementById("fechaCompra")
   if (fechaCompra) {
     fechaCompra.value = new Date().toLocaleDateString()
   }
+
+  // Añadir estilos CSS para animaciones
+  const style = document.createElement("style")
+  style.textContent = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    }
+  `
+  document.head.appendChild(style)
 }
-
-// Función para realizar una copia de seguridad en Firestore
-function realizarBackup() {
-  if (!usuarioActual) return
-
-  try {
-    const timestamp = new Date().toISOString()
-    firebase
-      .firestore()
-      .collection("backups")
-      .doc(`${usuarioActual}_${timestamp}`)
-      .set({
-        inventario,
-        facturas,
-        compras,
-        cuentasCobrar,
-        cuentasPagar,
-        ingresos,
-        gastos,
-        capital,
-        ganancias,
-        fechaBackup: firebase.firestore.FieldValue.serverTimestamp(),
-      })
-      .then(() => {
-        alert("Copia de seguridad realizada correctamente")
-      })
-      .catch((error) => {
-        console.error("Error al realizar copia de seguridad:", error)
-        alert("Error al realizar copia de seguridad")
-      })
-  } catch (error) {
-    console.error("Error al realizar copia de seguridad:", error)
-    alert("Error al realizar copia de seguridad")
-  }
-}
-
-// Función para restaurar datos desde Firestore
-function restaurarDatos() {
-  if (!usuarioActual) return
-
-  try {
-    // Obtener lista de backups
-    firebase
-      .firestore()
-      .collection("backups")
-      .where(firebase.firestore.FieldPath.documentId(), ">=", `${usuarioActual}_`)
-      .where(firebase.firestore.FieldPath.documentId(), "<=", `${usuarioActual}_\uf8ff`)
-      .orderBy(firebase.firestore.FieldPath.documentId(), "desc")
-      .get()
-      .then((querySnapshot) => {
-        if (querySnapshot.empty) {
-          alert("No hay copias de seguridad disponibles")
-          return
-        }
-
-        // Crear lista de backups para seleccionar
-        const backups = []
-        querySnapshot.forEach((doc) => {
-          const id = doc.id
-          const fecha = id.split("_")[1].replace("T", " ").substring(0, 19).replace("Z", "")
-          backups.push({ id, fecha })
-        })
-
-        // Mostrar lista para seleccionar (simplificado - en una aplicación real usarías un modal)
-        const backupSeleccionado = prompt(
-          `Seleccione el número de la copia de seguridad a restaurar:\n${backups
-            .map((b, i) => `${i + 1}. ${b.fecha}`)
-            .join("\n")}`,
-        )
-
-        if (!backupSeleccionado) return
-
-        const indice = Number.parseInt(backupSeleccionado) - 1
-        if (isNaN(indice) || indice < 0 || indice >= backups.length) {
-          alert("Selección inválida")
-          return
-        }
-
-        // Restaurar datos
-        firebase
-          .firestore()
-          .collection("backups")
-          .doc(backups[indice].id)
-          .get()
-          .then((doc) => {
-            if (!doc.exists) {
-              alert("La copia de seguridad seleccionada no existe")
-              return
-            }
-
-            const datosBackup = doc.data()
-            inventario = datosBackup.inventario || []
-            facturas = datosBackup.facturas || []
-            compras = datosBackup.compras || []
-            cuentasCobrar = datosBackup.cuentasCobrar || []
-            cuentasPagar = datosBackup.cuentasPagar || []
-            ingresos = datosBackup.ingresos || []
-            gastos = datosBackup.gastos || []
-            capital = datosBackup.capital || { productos: 0, efectivo: 0 }
-            ganancias = datosBackup.ganancias || 0
-
-            // Actualizar interfaz
-            actualizarTablaInventario()
-            actualizarTablaFacturas()
-            actualizarTablaCuentasCobrar()
-            actualizarTablaCompras()
-            actualizarTablaCuentasPagar()
-            actualizarGanancias()
-            actualizarCapital()
-
-            // Guardar en localStorage como respaldo
-            guardarDatosLocal()
-
-            alert("Datos restaurados correctamente")
-          })
-          .catch((error) => {
-            console.error("Error al restaurar datos:", error)
-            alert("Error al restaurar datos")
-          })
-      })
-      .catch((error) => {
-        console.error("Error al obtener backups:", error)
-        alert("Error al obtener copias de seguridad")
-      })
-  } catch (error) {
-    console.error("Error al restaurar datos:", error)
-    alert("Error al restaurar datos")
-  }
-}
-
-// Detectar estado de conexión para modo offline
-window.addEventListener("online", () => {
-  const statusIndicator = document.getElementById("firebaseStatus")
-  if (statusIndicator) {
-    statusIndicator.style.backgroundColor = "#4CAF50"
-    statusIndicator.title = "Conectado a Firebase"
-  }
-
-  if (usuarioActual) {
-    sincronizarDatos()
-    console.log("Datos sincronizados después de recuperar conexión")
-  }
-})
-
-window.addEventListener("offline", () => {
-  const statusIndicator = document.getElementById("firebaseStatus")
-  if (statusIndicator) {
-    statusIndicator.style.backgroundColor = "#F44336"
-    statusIndicator.title = "Desconectado de Firebase - Modo local activado"
-  }
-
-  alert("Conexión perdida. La aplicación funcionará en modo local hasta que se restablezca la conexión.")
-})
 
 // script.js
 document.addEventListener("DOMContentLoaded", () => {
@@ -1726,9 +2109,125 @@ try {
     window.XLSX = XLSX
   }
 } catch (e) {
-  // If there is an error, it means XLSX is not defined
+  // If there is an error, it means XLSX is not properly initialized
   console.error("XLSX is not properly initialized. Make sure you have included the js-xlsx library.")
 }
+// SCRIPT DEL INDICADOR DE INTERNET - COPIAR ESTE CÓDIGO
+(function() {
+    let isOnline = navigator.onLine;
+    let checkInterval;
+    
+    const indicator = document.getElementById('internetIndicator');
+    const notification = document.getElementById('connectionNotification');
+    
+    // Asegurarse de que los elementos existen antes de usarlos
+    if (!indicator || !notification) {
+        console.warn("Elementos del indicador de internet no encontrados. Asegúrate de haber copiado el HTML.");
+        return;
+    }
 
-
-
+    // Función para mostrar notificación
+    function showNotification(message, type) {
+        notification.textContent = message;
+        notification.className = `connection-notification ${type} show`;
+        
+        setTimeout(() => {
+            notification.classList.remove('show');
+        }, 4000);
+    }
+    
+    // Función para actualizar el indicador
+    function updateIndicator(online, checking = false) {
+        if (checking) {
+            indicator.className = 'internet-indicator checking';
+            indicator.textContent = '⏳';
+            indicator.setAttribute('data-tooltip', 'Verificando conexión...');
+            return;
+        }
+        
+        if (online) {
+            indicator.className = 'internet-indicator online';
+            indicator.textContent = '🌐';
+            indicator.setAttribute('data-tooltip', 'Conectado - Datos seguros');
+            
+            if (!isOnline) {
+                showNotification('✅ Internet conectado - Puedes guardar datos', 'success');
+                console.log('🌐 Internet conectado');
+            }
+        } else {
+            indicator.className = 'internet-indicator offline';
+            indicator.textContent = '❌';
+            indicator.setAttribute('data-tooltip', '¡SIN INTERNET! - No guardes datos');
+            
+            if (isOnline) {
+                showNotification('❌ Sin internet - ¡No guardes datos!', 'error');
+                console.log('❌ Internet desconectado');
+            }
+        }
+        
+        isOnline = online;
+    }
+    
+    // Función para probar conexión real
+    async function testConnection() {
+        updateIndicator(navigator.onLine, true);
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos de timeout
+            
+            const response = await fetch('https://www.google.com/favicon.ico', {
+                method: 'HEAD',
+                mode: 'no-cors', // Importante para evitar errores CORS
+                cache: 'no-cache',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            updateIndicator(true);
+            return true;
+        } catch (error) {
+            updateIndicator(false);
+            return false;
+        }
+    }
+    
+    // Event listeners
+    window.addEventListener('online', () => {
+        // Dar un pequeño retraso para que la red se estabilice
+        setTimeout(testConnection, 1000); 
+    });
+    
+    window.addEventListener('offline', () => {
+        updateIndicator(false);
+    });
+    
+    // Click en indicador para probar manualmente
+    indicator.addEventListener('click', testConnection);
+    
+    // Inicialización
+    function init() {
+        console.log('🚀 Indicador de internet iniciado');
+        testConnection(); // Primera verificación al iniciar
+        
+        // Verificar cada 30 segundos
+        checkInterval = setInterval(() => {
+            // Solo si el navegador cree que está online, hacemos la prueba real
+            if (navigator.onLine) {
+                testConnection();
+            } else {
+                // Si el navegador ya dice que está offline, actualizamos el indicador directamente
+                updateIndicator(false);
+            }
+        }, 30000); // Cada 30 segundos
+    }
+    
+    // Iniciar cuando se carga la página
+    // Usamos DOMContentLoaded para asegurar que el HTML esté listo
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+// FIN DEL CÓDIGO DEL INDICADOR
